@@ -1,2 +1,4 @@
 # url-shortner
-initial commit
+Clone the repository and run the executable file url-shortner as 
+```
+./url-shortner
