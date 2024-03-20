@@ -6,10 +6,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
+	"strings"
 )
 
 var (
-	urlMapping = make(map[string]string)
+	urlMapping   = make(map[string]string)
+	domainCounts = make(map[string]int)
 )
 
 type urlRequest struct {
@@ -17,6 +20,10 @@ type urlRequest struct {
 }
 type ShortnedUrlResponse struct {
 	Shortner_Url string `json:"shortned_url"`
+}
+type DomainCount struct {
+	Domain string `json:"domain"`
+	Count  int    `json:"count"`
 }
 
 func simpleHash(s string) uint32 {
@@ -59,6 +66,12 @@ func UrlShortnerHandler(writer http.ResponseWriter, request *http.Request) {
 	response := &ShortnedUrlResponse{
 		Shortner_Url: shortenedURL,
 	}
+	// Counting domain occurrences
+	domainArr := strings.Split(originalURL, "/")
+	if len(domainArr) >= 2 {
+		domain := domainArr[2]
+		domainCounts[domain]++
+	}
 	fmt.Println("Adding shortned url in the map and returning the result")
 	ndata, _ := json.Marshal(&response)
 	ndata = append(ndata, '\n')
@@ -76,8 +89,32 @@ func RedirectHandler(writer http.ResponseWriter, request *http.Request) {
 	}
 	http.Redirect(writer, request, originalURL, http.StatusFound)
 }
+func TopThreeDomainCounts(writer http.ResponseWriter, request *http.Request) {
+	var domainCountsList []DomainCount
+	for domain, count := range domainCounts {
+		domainCountsList = append(domainCountsList, DomainCount{Domain: domain, Count: count})
+	}
+
+	// Sort domain counts by count
+	sortedDomainCounts := func(i, j int) bool {
+		return domainCountsList[i].Count > domainCountsList[j].Count
+	}
+	fmt.Println("domainCountslist:", domainCountsList)
+	// Display only top 3 domains
+	if len(domainCountsList) > 3 {
+		sort.Slice(domainCountsList, sortedDomainCounts)
+		domainCountsList = domainCountsList[:3]
+	} else {
+		sort.Slice(domainCountsList, sortedDomainCounts)
+	}
+	// Return JSON response
+	ndata, _ := json.Marshal(&domainCountsList)
+	ndata = append(ndata, '\n')
+	writer.Write([]byte(ndata))
+}
 func main() {
 	http.HandleFunc("/shorten", UrlShortnerHandler)
 	http.HandleFunc("/", RedirectHandler)
+	http.HandleFunc("/domaincounts", TopThreeDomainCounts)
 	http.ListenAndServe(":8080", nil)
 }
