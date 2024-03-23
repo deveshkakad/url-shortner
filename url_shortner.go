@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 )
 
 var (
 	urlMapping   = make(map[string]string)
 	domainCounts = make(map[string]int)
 )
+var mutex sync.Mutex
 
 type urlRequest struct {
 	Url string `json:"url"`
@@ -50,6 +52,7 @@ func UrlShortnerHandler(writer http.ResponseWriter, request *http.Request) {
 	}
 	defer request.Body.Close()
 	originalURL := req.Url
+	mutex.Lock()
 	shortenedURL, ok := urlMapping[originalURL]
 	if ok {
 		response := &ShortnedUrlResponse{
@@ -69,9 +72,10 @@ func UrlShortnerHandler(writer http.ResponseWriter, request *http.Request) {
 	// Counting domain occurrences
 	domainArr := strings.Split(originalURL, "/")
 	if len(domainArr) >= 2 {
-		domain := domainArr[2]
+		domain := strings.Split(domainArr[2], "?")[0]
 		domainCounts[domain]++
 	}
+	mutex.Unlock()
 	fmt.Println("Adding shortned url in the map and returning the result")
 	ndata, _ := json.Marshal(&response)
 	ndata = append(ndata, '\n')
@@ -90,6 +94,8 @@ func RedirectHandler(writer http.ResponseWriter, request *http.Request) {
 	http.Redirect(writer, request, originalURL, http.StatusFound)
 }
 func TopThreeDomainCounts(writer http.ResponseWriter, request *http.Request) {
+	mutex.Lock()
+	defer mutex.Unlock()
 	var domainCountsList []DomainCount
 	for domain, count := range domainCounts {
 		domainCountsList = append(domainCountsList, DomainCount{Domain: domain, Count: count})
